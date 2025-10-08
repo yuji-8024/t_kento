@@ -23,7 +23,7 @@ def main():
     
     if uploaded_file is not None:
         try:
-            # エクセルファイルを読み込み
+            # エクセルファイルを読み込み（data_only=Trueで計算結果を取得）
             workbook = openpyxl.load_workbook(uploaded_file, data_only=True)
             sheet_names = workbook.sheetnames
             
@@ -78,8 +78,8 @@ def extract_overtime_data(workbook, member_sheets):
                     cell_value = worksheet[next_cell_ref].value
                 
                 if cell_value is not None:
-                    # 時間の形式をパース（例: "1:00" -> 1.0時間）
-                    time_hours = parse_time_to_hours(str(cell_value))
+                    # 時間値を直接渡す（文字列変換しない）
+                    time_hours = parse_time_to_hours(cell_value)
                     if time_hours > 0:
                         member_data[time_slot] = time_hours
                     else:
@@ -96,36 +96,51 @@ def extract_overtime_data(workbook, member_sheets):
     
     return overtime_data
 
-def parse_time_to_hours(time_str):
-    """時間文字列を時間数に変換する"""
-    if not time_str or time_str.strip() == '':
+def parse_time_to_hours(time_value):
+    """時間値を時間数に変換する"""
+    if time_value is None:
         return 0
     
-    # 文字列をクリーンアップ
-    time_str = str(time_str).strip()
+    # datetime.timeオブジェクトの場合
+    if hasattr(time_value, 'hour') and hasattr(time_value, 'minute'):
+        hours = time_value.hour
+        minutes = time_value.minute
+        result = hours + minutes / 60
+        print(f"DEBUG: datetime.time {time_value} -> hours={hours}, minutes={minutes}, result={result}")
+        return result
     
-    # 時間:分の形式をパース（例: "1:30" -> 1.5時間）
+    # 文字列の場合
+    time_str = str(time_value).strip()
+    if not time_str or time_str == '':
+        return 0
+    
+    # 時間:分:秒の形式をパース（例: "1:30:00" -> 1.5時間）
     if ':' in time_str:
         try:
             parts = time_str.split(':')
-            if len(parts) == 2:
+            if len(parts) >= 2:
                 hours = int(parts[0])
                 minutes = int(parts[1])
                 result = hours + minutes / 60
-                # デバッグ情報（一時的）
-                print(f"DEBUG: {time_str} -> hours={hours}, minutes={minutes}, result={result}")
+                print(f"DEBUG: 時間文字列 {time_str} -> hours={hours}, minutes={minutes}, result={result}")
                 return result
         except Exception as e:
             print(f"DEBUG: パースエラー {time_str}: {e}")
             pass
     
-    # 数値のみの場合はそのまま返す
+    # 数値の場合（エクセルの時間値は小数で表現される）
     try:
-        result = float(time_str)
-        print(f"DEBUG: 数値として認識 {time_str} -> {result}")
-        return result
+        # エクセルの時間値は1日=1.0で表現されるので、24倍して時間に変換
+        if isinstance(time_value, (int, float)):
+            result = time_value * 24
+            print(f"DEBUG: エクセル時間値 {time_value} -> {result}時間")
+            return result
+        else:
+            result = float(time_str)
+            print(f"DEBUG: 数値として認識 {time_str} -> {result}")
+            return result
     except:
-        # 文字列から数値を抽出（例: "1時間30分" -> 1.5）
+        # 文字列から数値を抽出
         import re
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
