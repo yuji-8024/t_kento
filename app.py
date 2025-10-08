@@ -111,19 +111,28 @@ def parse_time_to_hours(time_str):
             if len(parts) == 2:
                 hours = int(parts[0])
                 minutes = int(parts[1])
-                return hours + minutes / 60
-        except:
+                result = hours + minutes / 60
+                # デバッグ情報（一時的）
+                print(f"DEBUG: {time_str} -> hours={hours}, minutes={minutes}, result={result}")
+                return result
+        except Exception as e:
+            print(f"DEBUG: パースエラー {time_str}: {e}")
             pass
     
     # 数値のみの場合はそのまま返す
     try:
-        return float(time_str)
+        result = float(time_str)
+        print(f"DEBUG: 数値として認識 {time_str} -> {result}")
+        return result
     except:
         # 文字列から数値を抽出（例: "1時間30分" -> 1.5）
         import re
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
-            return float(numbers[0])
+            result = float(numbers[0])
+            print(f"DEBUG: 文字列から数値抽出 {time_str} -> {result}")
+            return result
+        print(f"DEBUG: 認識できない形式 {time_str}")
         return 0
 
 def display_results(overtime_data):
