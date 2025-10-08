@@ -62,16 +62,10 @@ def extract_overtime_data(workbook, member_sheets):
         'W39': '平日・休日時間外の応動（05:00-09:00）'
     }
     
-    # デバッグ情報を表示
-    st.markdown("### 🔍 デバッグ情報")
-    
     for sheet_name in member_sheets:
         try:
             worksheet = workbook[sheet_name]
             member_data = {}
-            
-            # シートの基本情報を表示
-            st.write(f"**シート: {sheet_name}**")
             
             for cell_ref, time_slot in time_slots.items():
                 # セルK39, O39, S39, W39の値を取得
@@ -82,30 +76,22 @@ def extract_overtime_data(workbook, member_sheets):
                     # 結合セルの下のセルを確認
                     next_cell_ref = cell_ref.replace('39', '40')
                     cell_value = worksheet[next_cell_ref].value
-                    st.write(f"- 結合セル確認: {next_cell_ref}: {cell_value}")
-                
-                # デバッグ情報を表示
-                st.write(f"- {cell_ref}: {cell_value} (型: {type(cell_value)})")
                 
                 if cell_value is not None:
                     # 時間の形式をパース（例: "1:00" -> 1.0時間）
                     time_hours = parse_time_to_hours(str(cell_value))
-                    st.write(f"  → パース結果: {time_hours}時間")
                     if time_hours > 0:
                         member_data[time_slot] = time_hours
+                    else:
+                        member_data[time_slot] = 0
                 else:
                     member_data[time_slot] = 0
-                    st.write(f"  → セルが空またはNone")
             
-            # データがある場合のみ追加
-            if any(value > 0 for value in member_data.values()):
-                overtime_data[sheet_name] = member_data
-                st.success(f"✅ {sheet_name}: データが見つかりました")
-            else:
-                st.warning(f"⚠️ {sheet_name}: データが見つかりませんでした")
+            # 全メンバーを追加（データがなくても表示）
+            overtime_data[sheet_name] = member_data
                 
         except Exception as e:
-            st.error(f"❌ シート '{sheet_name}' の処理中にエラーが発生しました: {str(e)}")
+            st.warning(f"シート '{sheet_name}' の処理中にエラーが発生しました: {str(e)}")
             continue
     
     return overtime_data
@@ -182,7 +168,9 @@ def display_results(overtime_data):
             st.metric("総残業時間", f"{total_hours:.1f}時間")
         
         with col3:
-            avg_hours = total_hours / len(overtime_data) if overtime_data else 0
+            # データがあるメンバーのみで平均を計算
+            members_with_data = [data for data in overtime_data.values() if any(value > 0 for value in data.values())]
+            avg_hours = total_hours / len(members_with_data) if members_with_data else 0
             st.metric("平均残業時間", f"{avg_hours:.1f}時間")
         
         with col4:
