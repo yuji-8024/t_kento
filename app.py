@@ -78,14 +78,25 @@ def extract_overtime_data(workbook, member_sheets):
                     cell_value = worksheet[next_cell_ref].value
                 
                 if cell_value is not None:
-                    # 時間値を直接渡す（文字列変換しない）
+                    # 表示用の形式と集計用の数値を両方保存
+                    display_format = parse_time_to_display_format(cell_value)
                     time_hours = parse_time_to_hours(cell_value)
+                    
                     if time_hours > 0:
-                        member_data[time_slot] = time_hours
+                        member_data[time_slot] = {
+                            'display': display_format,
+                            'hours': time_hours
+                        }
                     else:
-                        member_data[time_slot] = 0
+                        member_data[time_slot] = {
+                            'display': "0:00",
+                            'hours': 0
+                        }
                 else:
-                    member_data[time_slot] = 0
+                    member_data[time_slot] = {
+                        'display': "0:00",
+                        'hours': 0
+                    }
             
             # 全メンバーを追加（データがなくても表示）
             overtime_data[sheet_name] = member_data
@@ -96,33 +107,33 @@ def extract_overtime_data(workbook, member_sheets):
     
     return overtime_data
 
-def parse_time_to_hours(time_value):
-    """時間値を時間数に変換する"""
+def parse_time_to_display_format(time_value):
+    """時間値を表示用の形式に変換する（1:30形式）"""
     if time_value is None:
-        return 0
+        return "0:00"
     
     # datetime.timeオブジェクトの場合
     if hasattr(time_value, 'hour') and hasattr(time_value, 'minute'):
         hours = time_value.hour
         minutes = time_value.minute
-        result = hours + minutes / 60
-        print(f"DEBUG: datetime.time {time_value} -> hours={hours}, minutes={minutes}, result={result}")
+        result = f"{hours}:{minutes:02d}"
+        print(f"DEBUG: datetime.time {time_value} -> {result}")
         return result
     
     # 文字列の場合
     time_str = str(time_value).strip()
     if not time_str or time_str == '':
-        return 0
+        return "0:00"
     
-    # 時間:分:秒の形式をパース（例: "1:30:00" -> 1.5時間）
+    # 時間:分:秒の形式をパース（例: "1:30:00" -> "1:30"）
     if ':' in time_str:
         try:
             parts = time_str.split(':')
             if len(parts) >= 2:
                 hours = int(parts[0])
                 minutes = int(parts[1])
-                result = hours + minutes / 60
-                print(f"DEBUG: 時間文字列 {time_str} -> hours={hours}, minutes={minutes}, result={result}")
+                result = f"{hours}:{minutes:02d}"
+                print(f"DEBUG: 時間文字列 {time_str} -> {result}")
                 return result
         except Exception as e:
             print(f"DEBUG: パースエラー {time_str}: {e}")
@@ -132,11 +143,18 @@ def parse_time_to_hours(time_value):
     try:
         # エクセルの時間値は1日=1.0で表現されるので、24倍して時間に変換
         if isinstance(time_value, (int, float)):
-            result = time_value * 24
-            print(f"DEBUG: エクセル時間値 {time_value} -> {result}時間")
+            total_hours = time_value * 24
+            hours = int(total_hours)
+            minutes = int((total_hours - hours) * 60)
+            result = f"{hours}:{minutes:02d}"
+            print(f"DEBUG: エクセル時間値 {time_value} -> {result}")
             return result
         else:
-            result = float(time_str)
+            # 数値として認識された場合
+            total_hours = float(time_str)
+            hours = int(total_hours)
+            minutes = int((total_hours - hours) * 60)
+            result = f"{hours}:{minutes:02d}"
             print(f"DEBUG: 数値として認識 {time_str} -> {result}")
             return result
     except:
@@ -144,10 +162,58 @@ def parse_time_to_hours(time_value):
         import re
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
-            result = float(numbers[0])
+            total_hours = float(numbers[0])
+            hours = int(total_hours)
+            minutes = int((total_hours - hours) * 60)
+            result = f"{hours}:{minutes:02d}"
             print(f"DEBUG: 文字列から数値抽出 {time_str} -> {result}")
             return result
         print(f"DEBUG: 認識できない形式 {time_str}")
+        return "0:00"
+
+def parse_time_to_hours(time_value):
+    """時間値を時間数に変換する（集計用）"""
+    if time_value is None:
+        return 0
+    
+    # datetime.timeオブジェクトの場合
+    if hasattr(time_value, 'hour') and hasattr(time_value, 'minute'):
+        hours = time_value.hour
+        minutes = time_value.minute
+        result = hours + minutes / 60
+        return result
+    
+    # 文字列の場合
+    time_str = str(time_value).strip()
+    if not time_str or time_str == '':
+        return 0
+    
+    # 時間:分:秒の形式をパース
+    if ':' in time_str:
+        try:
+            parts = time_str.split(':')
+            if len(parts) >= 2:
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                result = hours + minutes / 60
+                return result
+        except:
+            pass
+    
+    # 数値の場合
+    try:
+        if isinstance(time_value, (int, float)):
+            result = time_value * 24
+            return result
+        else:
+            result = float(time_str)
+            return result
+    except:
+        import re
+        numbers = re.findall(r'\d+\.?\d*', time_str)
+        if numbers:
+            result = float(numbers[0])
+            return result
         return 0
 
 def display_results(overtime_data):
@@ -158,7 +224,11 @@ def display_results(overtime_data):
     df_data = []
     for member, data in overtime_data.items():
         row = {'メンバー': member}
-        row.update(data)
+        for time_slot, time_data in data.items():
+            if isinstance(time_data, dict):
+                row[time_slot] = time_data['display']
+            else:
+                row[time_slot] = time_data
         df_data.append(row)
     
     if df_data:
@@ -188,17 +258,26 @@ def display_results(overtime_data):
             st.metric("対象メンバー数", len(overtime_data))
         
         with col2:
-            total_hours = sum(sum(data.values()) for data in overtime_data.values())
+            total_hours = sum(sum(
+                time_data['hours'] if isinstance(time_data, dict) else time_data 
+                for time_data in data.values()
+            ) for data in overtime_data.values())
             st.metric("総残業時間", f"{total_hours:.1f}時間")
         
         with col3:
             # データがあるメンバーのみで平均を計算
-            members_with_data = [data for data in overtime_data.values() if any(value > 0 for value in data.values())]
+            members_with_data = [data for data in overtime_data.values() if any(
+                (time_data['hours'] if isinstance(time_data, dict) else time_data) > 0 
+                for time_data in data.values()
+            )]
             avg_hours = total_hours / len(members_with_data) if members_with_data else 0
             st.metric("平均残業時間", f"{avg_hours:.1f}時間")
         
         with col4:
-            max_hours = max(sum(data.values()) for data in overtime_data.values()) if overtime_data else 0
+            max_hours = max(sum(
+                time_data['hours'] if isinstance(time_data, dict) else time_data 
+                for time_data in data.values()
+            ) for data in overtime_data.values()) if overtime_data else 0
             st.metric("最大残業時間", f"{max_hours:.1f}時間")
 
 if __name__ == "__main__":
