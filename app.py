@@ -89,12 +89,12 @@ def extract_overtime_data(workbook, member_sheets):
                         }
                     else:
                         member_data[time_slot] = {
-                            'display': "0:00",
+                            'display': "",  # 空白セル
                             'hours': 0
                         }
                 else:
                     member_data[time_slot] = {
-                        'display': "0:00",
+                        'display': "",  # 空白セル
                         'hours': 0
                     }
             
@@ -110,7 +110,7 @@ def extract_overtime_data(workbook, member_sheets):
 def parse_time_to_display_format(time_value):
     """時間値を表示用の形式に変換する（1:30形式）"""
     if time_value is None:
-        return "0:00"
+        return ""  # 空白セル
     
     # datetime.timeオブジェクトの場合
     if hasattr(time_value, 'hour') and hasattr(time_value, 'minute'):
@@ -123,7 +123,7 @@ def parse_time_to_display_format(time_value):
     # 文字列の場合
     time_str = str(time_value).strip()
     if not time_str or time_str == '':
-        return "0:00"
+        return ""  # 空白セル
     
     # 時間:分:秒の形式をパース（例: "1:30:00" -> "1:30"）
     if ':' in time_str:
@@ -132,6 +132,9 @@ def parse_time_to_display_format(time_value):
             if len(parts) >= 2:
                 hours = int(parts[0])
                 minutes = int(parts[1])
+                # 0:00の場合は空白を返す
+                if hours == 0 and minutes == 0:
+                    return ""  # 空白セル
                 result = f"{hours}:{minutes:02d}"
                 print(f"DEBUG: 時間文字列 {time_str} -> {result}")
                 return result
@@ -146,6 +149,9 @@ def parse_time_to_display_format(time_value):
             total_hours = time_value * 24
             hours = int(total_hours)
             minutes = int((total_hours - hours) * 60)
+            # 0:00の場合は空白を返す
+            if hours == 0 and minutes == 0:
+                return ""  # 空白セル
             result = f"{hours}:{minutes:02d}"
             print(f"DEBUG: エクセル時間値 {time_value} -> {result}")
             return result
@@ -154,6 +160,9 @@ def parse_time_to_display_format(time_value):
             total_hours = float(time_str)
             hours = int(total_hours)
             minutes = int((total_hours - hours) * 60)
+            # 0:00の場合は空白を返す
+            if hours == 0 and minutes == 0:
+                return ""  # 空白セル
             result = f"{hours}:{minutes:02d}"
             print(f"DEBUG: 数値として認識 {time_str} -> {result}")
             return result
@@ -165,11 +174,14 @@ def parse_time_to_display_format(time_value):
             total_hours = float(numbers[0])
             hours = int(total_hours)
             minutes = int((total_hours - hours) * 60)
+            # 0:00の場合は空白を返す
+            if hours == 0 and minutes == 0:
+                return ""  # 空白セル
             result = f"{hours}:{minutes:02d}"
             print(f"DEBUG: 文字列から数値抽出 {time_str} -> {result}")
             return result
         print(f"DEBUG: 認識できない形式 {time_str}")
-        return "0:00"
+        return ""  # 空白セル
 
 def parse_time_to_hours(time_value):
     """時間値を時間数に変換する（集計用）"""
