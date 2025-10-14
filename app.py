@@ -253,6 +253,16 @@ def parse_time_to_hours(time_value):
         print(f"DEBUG: datetime.time -> {hours}:{minutes} = {result}時間")
         return result
     
+    # datetime.datetimeオブジェクトの場合
+    if hasattr(time_value, 'date') and hasattr(time_value, 'time'):
+        # 日付部分を除いて時間部分のみを取得
+        time_part = time_value.time()
+        hours = time_part.hour
+        minutes = time_part.minute
+        result = hours + minutes / 60
+        print(f"DEBUG: datetime.datetime -> {hours}:{minutes} = {result}時間")
+        return result
+    
     # 文字列の場合
     time_str = str(time_value).strip()
     print(f"DEBUG: 文字列として処理 - '{time_str}'")
@@ -274,14 +284,19 @@ def parse_time_to_hours(time_value):
             print(f"DEBUG: 時間文字列パースエラー: {e}")
             pass
     
-    # 数値の場合
+    # 数値の場合（エクセルの時間値は小数で表現される）
     try:
         if isinstance(time_value, (int, float)):
+            # エクセルの時間値は1日=1.0で表現されるので、24倍して時間に変換
             result = time_value * 24
             print(f"DEBUG: エクセル時間値 {time_value} -> {result}時間")
             return result
         else:
+            # 文字列を数値として変換
             result = float(time_str)
+            # 1未満の場合は時間値として扱う（1日=1.0）
+            if result < 1:
+                result = result * 24
             print(f"DEBUG: 数値文字列 {time_str} -> {result}時間")
             return result
     except Exception as e:
@@ -290,6 +305,9 @@ def parse_time_to_hours(time_value):
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
             result = float(numbers[0])
+            # 1未満の場合は時間値として扱う
+            if result < 1:
+                result = result * 24
             print(f"DEBUG: 正規表現で数値抽出 {time_str} -> {result}時間")
             return result
         print("DEBUG: 全ての変換に失敗, returning 0")
@@ -326,7 +344,8 @@ def extract_holiday_data(workbook, member_sheets):
                     if time_value is not None:
                         time_hours = parse_time_to_hours(time_value)
                         print(f"DEBUG: {time_cell} - 時間値: {time_value}, 変換後時間数: {time_hours}")
-                        if time_hours > 0:
+                        # 00:01以上（約0.000694時間以上）の場合のみ処理
+                        if time_hours > 0.000694:  # 1分 = 1/60/24 = 0.000694時間
                             # B列の曜日情報を取得（DATE関数の結果を取得）
                             day_cell = f"B{row}"
                             day_value = worksheet[day_cell].value
