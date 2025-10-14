@@ -668,17 +668,31 @@ def display_overtime_pay_results(pay_data, holiday_data):
                 pay_amount = time_data['holiday_pay'] + time_data['weekday_pay']
                 total_pay += pay_amount
                 
-                # 稼働時間列
-                row[f'稼働：{time_slot}'] = f"{work_hours:.1f}"
-                # 請求額列
-                row[f'請求：{time_slot}'] = f"¥{pay_amount:,.0f}"
+                # 稼働時間列（0.0の場合は空白）
+                if work_hours > 0:
+                    row[f'稼働：{time_slot}'] = f"{work_hours:.1f}"
+                else:
+                    row[f'稼働：{time_slot}'] = ""
+                
+                # 請求額列（¥0の場合は空白）
+                if pay_amount > 0:
+                    row[f'請求：{time_slot}'] = f"¥{pay_amount:,.0f}"
+                else:
+                    row[f'請求：{time_slot}'] = ""
             else:
-                row[f'稼働：{time_slot}'] = "0.0"
-                row[f'請求：{time_slot}'] = "¥0"
+                row[f'稼働：{time_slot}'] = ""
+                row[f'請求：{time_slot}'] = ""
         
-        # 総稼働時間と総請求額
-        row['稼働時間'] = f"{total_work_hours:.1f}"
-        row['請求額'] = f"¥{total_pay:,.0f}"
+        # 総稼働時間と総請求額（0の場合は空白）
+        if total_work_hours > 0:
+            row['稼働時間'] = f"{total_work_hours:.1f}"
+        else:
+            row['稼働時間'] = ""
+        
+        if total_pay > 0:
+            row['請求額'] = f"¥{total_pay:,.0f}"
+        else:
+            row['請求額'] = ""
         
         df_data.append(row)
     
