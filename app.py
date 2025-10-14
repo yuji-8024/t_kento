@@ -395,6 +395,40 @@ def is_holiday_day(day_value, holiday_value):
         st.write("DEBUG: day_value is None, returning False")
         return False
     
+    # エクセルの日付シリアル値（整数）の場合
+    if isinstance(day_value, int):
+        st.write("DEBUG: エクセル日付シリアル値として処理")
+        # エクセルの日付シリアル値をdatetimeオブジェクトに変換
+        # エクセルの基準日は1900年1月1日（ただし、1900年は閏年として扱われるバグがある）
+        from datetime import datetime, timedelta
+        try:
+            # エクセルの基準日（1900年1月1日）から日数を加算
+            base_date = datetime(1899, 12, 30)  # エクセルの基準日
+            target_date = base_date + timedelta(days=day_value)
+            weekday = target_date.weekday()
+            st.write(f"DEBUG: シリアル値 {day_value} -> 日付: {target_date}, weekday(): {weekday}")
+            
+            # 土曜日(5)と日曜日(6)は休日
+            if weekday in [5, 6]:
+                st.write("DEBUG: 土日なので休日")
+                return True
+            
+            # 月〜金の場合、C列に「祝日」と記載がある場合は休日
+            if holiday_value is not None and str(holiday_value).strip() == '祝日':
+                st.write("DEBUG: 祝日なので休日")
+                return True
+            
+            st.write("DEBUG: 平日")
+            return False
+        except Exception as e:
+            st.write(f"DEBUG: 日付変換エラー: {e}")
+            # エラーの場合は祝日情報で判定
+            if holiday_value is not None and str(holiday_value).strip() == '祝日':
+                st.write("DEBUG: 祝日なので休日（エラー時）")
+                return True
+            st.write("DEBUG: 平日（エラー時）")
+            return False
+    
     # DATE関数の結果（datetimeオブジェクト）の場合
     if hasattr(day_value, 'weekday'):
         st.write("DEBUG: datetimeオブジェクトとして処理")
