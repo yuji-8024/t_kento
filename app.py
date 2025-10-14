@@ -14,6 +14,19 @@ def main():
     st.title("📊 残業時間集計アプリ")
     st.markdown("---")
     
+    # タブの作成
+    tab1, tab2 = st.tabs(["📈 残業時間集計", "📅 休日・平日仕訳"])
+    
+    with tab1:
+        overtime_tab()
+    
+    with tab2:
+        holiday_tab()
+
+def overtime_tab():
+    """残業時間集計タブの内容"""
+    st.header("📈 残業時間集計")
+    
     # ファイルアップロード
     uploaded_file = st.file_uploader(
         "エクセルファイルをアップロードしてください",
@@ -30,7 +43,7 @@ def main():
             st.success(f"ファイルが正常に読み込まれました。シート数: {len(sheet_names)}")
             
             # 固定シートの確認
-            fixed_sheets = ["まとめ", "記入例", "報告書format"]
+            fixed_sheets = ["まとめ", "記入例", "報告書format", "残業代"]
             member_sheets = [sheet for sheet in sheet_names if sheet not in fixed_sheets]
             
             st.info(f"固定シート: {fixed_sheets}")
@@ -44,6 +57,47 @@ def main():
                     display_results(overtime_data)
                 else:
                     st.warning("残業時間のデータが見つかりませんでした。")
+            else:
+                st.warning("メンバーのシートが見つかりませんでした。")
+                
+        except Exception as e:
+            st.error(f"ファイルの読み込み中にエラーが発生しました: {str(e)}")
+
+def holiday_tab():
+    """休日・平日仕訳タブの内容"""
+    st.header("📅 休日・平日仕訳")
+    
+    # ファイルアップロード
+    uploaded_file = st.file_uploader(
+        "エクセルファイルをアップロードしてください",
+        type=['xlsx', 'xls'],
+        help="複数のシートを持つエクセルファイルをアップロードしてください",
+        key="holiday_uploader"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # エクセルファイルを読み込み（data_only=Trueで計算結果を取得）
+            workbook = openpyxl.load_workbook(uploaded_file, data_only=True)
+            sheet_names = workbook.sheetnames
+            
+            st.success(f"ファイルが正常に読み込まれました。シート数: {len(sheet_names)}")
+            
+            # 固定シートの確認
+            fixed_sheets = ["まとめ", "記入例", "報告書format", "残業代"]
+            member_sheets = [sheet for sheet in sheet_names if sheet not in fixed_sheets]
+            
+            st.info(f"固定シート: {fixed_sheets}")
+            st.info(f"メンバーシート: {member_sheets}")
+            
+            if member_sheets:
+                # 休日・平日仕訳の集計
+                holiday_data = extract_holiday_data(workbook, member_sheets)
+                
+                if holiday_data:
+                    display_holiday_results(holiday_data)
+                else:
+                    st.warning("休日・平日仕訳のデータが見つかりませんでした。")
             else:
                 st.warning("メンバーのシートが見つかりませんでした。")
                 
@@ -227,6 +281,152 @@ def parse_time_to_hours(time_value):
             result = float(numbers[0])
             return result
         return 0
+
+def extract_holiday_data(workbook, member_sheets):
+    """休日・平日仕訳データを抽出する"""
+    holiday_data = {}
+    
+    # 時間帯の定義
+    time_slots = {
+        'K': '休日時間帯の応動（09:00-18:00）',
+        'O': '平日・休日時間外の応動（18:00-22:00）',
+        'S': '平日・休日深夜の応動（22:00-05:00）',
+        'W': '平日・休日時間外の応動（05:00-09:00）'
+    }
+    
+    for sheet_name in member_sheets:
+        try:
+            worksheet = workbook[sheet_name]
+            member_data = {}
+            
+            for column, time_slot in time_slots.items():
+                holiday_hours = 0
+                weekday_hours = 0
+                
+                # 8行目から38行目までチェック
+                for row in range(8, 39):
+                    # 時間セル（K8, O8, S8, W8など）
+                    time_cell = f"{column}{row}"
+                    time_value = worksheet[time_cell].value
+                    
+                    # 時間が00:01以上の場合のみ処理
+                    if time_value is not None:
+                        time_hours = parse_time_to_hours(time_value)
+                        if time_hours > 0:
+                            # B列の曜日情報を取得
+                            day_cell = f"B{row}"
+                            day_value = worksheet[day_cell].value
+                            
+                            # C列の祝日情報を取得
+                            holiday_cell = f"C{row}"
+                            holiday_value = worksheet[holiday_cell].value
+                            
+                            # 休日・平日の判定
+                            is_holiday = is_holiday_day(day_value, holiday_value)
+                            
+                            if is_holiday:
+                                holiday_hours += time_hours
+                            else:
+                                weekday_hours += time_hours
+                
+                member_data[time_slot] = {
+                    'holiday_hours': holiday_hours,
+                    'weekday_hours': weekday_hours,
+                    'total_hours': holiday_hours + weekday_hours
+                }
+            
+            holiday_data[sheet_name] = member_data
+                
+        except Exception as e:
+            st.warning(f"シート '{sheet_name}' の処理中にエラーが発生しました: {str(e)}")
+            continue
+    
+    return holiday_data
+
+def is_holiday_day(day_value, holiday_value):
+    """曜日と祝日情報から休日かどうかを判定する"""
+    if day_value is None:
+        return False
+    
+    day_str = str(day_value).strip()
+    
+    # 土日は休日
+    if day_str in ['土', '日']:
+        return True
+    
+    # 月〜金の場合、C列に「祝日」と記載がある場合は休日
+    if day_str in ['月', '火', '水', '木', '金']:
+        if holiday_value is not None and str(holiday_value).strip() == '祝日':
+            return True
+        return False
+    
+    return False
+
+def display_holiday_results(holiday_data):
+    """休日・平日仕訳結果を表示する"""
+    st.markdown("## 📅 休日・平日仕訳結果")
+    
+    # データフレームを作成
+    df_data = []
+    for member, data in holiday_data.items():
+        for time_slot, time_data in data.items():
+            if time_data['total_hours'] > 0:  # 時間がある場合のみ表示
+                row = {
+                    'メンバー': member,
+                    '応動': time_slot,
+                    '休日時間': format_hours(time_data['holiday_hours']),
+                    '平日時間': format_hours(time_data['weekday_hours']),
+                    '合計時間': format_hours(time_data['total_hours'])
+                }
+                df_data.append(row)
+    
+    if df_data:
+        df = pd.DataFrame(df_data)
+        
+        # 表示
+        st.dataframe(df, use_container_width=True)
+        
+        # ダウンロードボタン
+        csv = df.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="📥 CSVファイルとしてダウンロード",
+            data=csv,
+            file_name=f"休日平日仕訳_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+        
+        # 統計情報
+        st.markdown("### 📊 統計情報")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_holiday_hours = sum(sum(
+                time_data['holiday_hours'] for time_data in data.values()
+            ) for data in holiday_data.values())
+            st.metric("総休日時間", f"{total_holiday_hours:.1f}時間")
+        
+        with col2:
+            total_weekday_hours = sum(sum(
+                time_data['weekday_hours'] for time_data in data.values()
+            ) for data in holiday_data.values())
+            st.metric("総平日時間", f"{total_weekday_hours:.1f}時間")
+        
+        with col3:
+            total_hours = total_holiday_hours + total_weekday_hours
+            st.metric("総時間", f"{total_hours:.1f}時間")
+        
+        with col4:
+            holiday_ratio = (total_holiday_hours / total_hours * 100) if total_hours > 0 else 0
+            st.metric("休日比率", f"{holiday_ratio:.1f}%")
+
+def format_hours(hours):
+    """時間を表示用の形式に変換する"""
+    if hours == 0:
+        return ""
+    
+    h = int(hours)
+    m = int((hours - h) * 60)
+    return f"{h}:{m:02d}"
 
 def display_results(overtime_data):
     """結果を表示する"""
