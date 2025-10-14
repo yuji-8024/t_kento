@@ -322,12 +322,18 @@ def extract_holiday_data(workbook, member_sheets):
                             holiday_value = worksheet[holiday_cell].value
                             
                             # デバッグ出力
-                            print(f"DEBUG: {sheet_name} {time_cell} - 時間: {time_value}, B列: {day_value}, C列: {holiday_value}")
+                            print(f"DEBUG: {sheet_name} {time_cell} - 時間: {time_value}, B列: {day_value} (type: {type(day_value)}), C列: {holiday_value}")
                             
                             # 休日・平日の判定
                             is_holiday = is_holiday_day(day_value, holiday_value)
                             
                             print(f"DEBUG: 判定結果 - 休日: {is_holiday}")
+                            
+                            # より詳細なデバッグ
+                            if hasattr(day_value, 'weekday'):
+                                print(f"DEBUG: datetimeオブジェクト - weekday(): {day_value.weekday()}, 日付: {day_value}")
+                            else:
+                                print(f"DEBUG: 文字列として処理 - 値: '{day_value}'")
                             
                             if is_holiday:
                                 holiday_hours += time_hours
@@ -350,35 +356,50 @@ def extract_holiday_data(workbook, member_sheets):
 
 def is_holiday_day(day_value, holiday_value):
     """曜日と祝日情報から休日かどうかを判定する"""
+    print(f"DEBUG is_holiday_day: day_value={day_value} (type: {type(day_value)}), holiday_value={holiday_value}")
+    
     if day_value is None:
+        print("DEBUG: day_value is None, returning False")
         return False
     
     # DATE関数の結果（datetimeオブジェクト）の場合
     if hasattr(day_value, 'weekday'):
+        print("DEBUG: datetimeオブジェクトとして処理")
         # weekday()は月曜日=0, 日曜日=6
         weekday = day_value.weekday()
+        print(f"DEBUG: weekday() = {weekday}")
+        
         # 土曜日(5)と日曜日(6)は休日
         if weekday in [5, 6]:
+            print("DEBUG: 土日なので休日")
             return True
         
         # 月〜金の場合、C列に「祝日」と記載がある場合は休日
         if holiday_value is not None and str(holiday_value).strip() == '祝日':
+            print("DEBUG: 祝日なので休日")
             return True
+        
+        print("DEBUG: 平日")
         return False
     
     # 文字列の場合
     day_str = str(day_value).strip()
+    print(f"DEBUG: 文字列として処理 - '{day_str}'")
     
     # 土日は休日
     if day_str in ['土', '日']:
+        print("DEBUG: 土日なので休日")
         return True
     
     # 月〜金の場合、C列に「祝日」と記載がある場合は休日
     if day_str in ['月', '火', '水', '木', '金']:
         if holiday_value is not None and str(holiday_value).strip() == '祝日':
+            print("DEBUG: 祝日なので休日")
             return True
+        print("DEBUG: 平日")
         return False
     
+    print("DEBUG: 判定できないので平日")
     return False
 
 def display_holiday_results(holiday_data):
