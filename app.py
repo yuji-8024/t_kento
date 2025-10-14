@@ -669,21 +669,39 @@ def display_overtime_pay_results(pay_data, holiday_data):
                 total_pay += pay_amount
                 
                 # 稼働時間列
-                row[f'稼働：{time_slot}'] = f"{work_hours:.1f}時間"
+                row[f'稼働：{time_slot}'] = f"{work_hours:.1f}"
                 # 請求額列
                 row[f'請求：{time_slot}'] = f"¥{pay_amount:,.0f}"
             else:
-                row[f'稼働：{time_slot}'] = "0.0時間"
+                row[f'稼働：{time_slot}'] = "0.0"
                 row[f'請求：{time_slot}'] = "¥0"
         
         # 総稼働時間と総請求額
-        row['稼働時間'] = f"{total_work_hours:.1f}時間"
+        row['稼働時間'] = f"{total_work_hours:.1f}"
         row['請求額'] = f"¥{total_pay:,.0f}"
         
         df_data.append(row)
     
     if df_data:
         df = pd.DataFrame(df_data)
+        
+        # 列の順序を指定（稼働4つ左側、請求4つ右側）
+        columns_order = [
+            'メンバー',
+            '稼働：休日時間帯の応動（09:00-18:00）',
+            '稼働：平日・休日時間外の応動（18:00-22:00）',
+            '稼働：平日・休日深夜の応動（22:00-05:00）',
+            '稼働：平日・休日時間外の応動（05:00-09:00）',
+            '請求：休日時間帯の応動（09:00-18:00）',
+            '請求：平日・休日時間外の応動（18:00-22:00）',
+            '請求：平日・休日深夜の応動（22:00-05:00）',
+            '請求：平日・休日時間外の応動（05:00-09:00）',
+            '稼働時間',
+            '請求額'
+        ]
+        
+        # 列の順序を適用
+        df = df[columns_order]
         
         # 表示
         st.dataframe(df, use_container_width=True)
@@ -712,7 +730,7 @@ def display_overtime_pay_results(pay_data, holiday_data):
                 hours_to_decimal(holiday_time_data['holiday_hours']) + hours_to_decimal(holiday_time_data['weekday_hours'])
                 for holiday_time_data in member_data.values()
             ) for member_data in holiday_data.values())
-            st.metric("総稼働時間", f"{total_hours:.1f}時間")
+            st.metric("総稼働時間", f"{total_hours:.1f}")
         
         with col3:
             avg_pay = total_pay / len(pay_data) if pay_data else 0
