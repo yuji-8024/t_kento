@@ -313,7 +313,7 @@ def extract_holiday_data(workbook, member_sheets):
                     if time_value is not None:
                         time_hours = parse_time_to_hours(time_value)
                         if time_hours > 0:
-                            # B列の曜日情報を取得
+                            # B列の曜日情報を取得（DATE関数の結果を取得）
                             day_cell = f"B{row}"
                             day_value = worksheet[day_cell].value
                             
@@ -321,8 +321,13 @@ def extract_holiday_data(workbook, member_sheets):
                             holiday_cell = f"C{row}"
                             holiday_value = worksheet[holiday_cell].value
                             
+                            # デバッグ出力
+                            print(f"DEBUG: {sheet_name} {time_cell} - 時間: {time_value}, B列: {day_value}, C列: {holiday_value}")
+                            
                             # 休日・平日の判定
                             is_holiday = is_holiday_day(day_value, holiday_value)
+                            
+                            print(f"DEBUG: 判定結果 - 休日: {is_holiday}")
                             
                             if is_holiday:
                                 holiday_hours += time_hours
@@ -348,6 +353,20 @@ def is_holiday_day(day_value, holiday_value):
     if day_value is None:
         return False
     
+    # DATE関数の結果（datetimeオブジェクト）の場合
+    if hasattr(day_value, 'weekday'):
+        # weekday()は月曜日=0, 日曜日=6
+        weekday = day_value.weekday()
+        # 土曜日(5)と日曜日(6)は休日
+        if weekday in [5, 6]:
+            return True
+        
+        # 月〜金の場合、C列に「祝日」と記載がある場合は休日
+        if holiday_value is not None and str(holiday_value).strip() == '祝日':
+            return True
+        return False
+    
+    # 文字列の場合
     day_str = str(day_value).strip()
     
     # 土日は休日
@@ -366,19 +385,31 @@ def display_holiday_results(holiday_data):
     """休日・平日仕訳結果を表示する"""
     st.markdown("## 📅 休日・平日仕訳結果")
     
-    # データフレームを作成
+    # データフレームを作成（指定された形式）
     df_data = []
     for member, data in holiday_data.items():
-        for time_slot, time_data in data.items():
-            if time_data['total_hours'] > 0:  # 時間がある場合のみ表示
-                row = {
-                    'メンバー': member,
-                    '応動': time_slot,
-                    '休日時間': format_hours(time_data['holiday_hours']),
-                    '平日時間': format_hours(time_data['weekday_hours']),
-                    '合計時間': format_hours(time_data['total_hours'])
-                }
-                df_data.append(row)
+        row = {'メンバー': member}
+        
+        # 各時間帯の休日・平日時間を追加
+        time_slots = [
+            '休日時間帯の応動（09:00-18:00）',
+            '平日・休日時間外の応動（18:00-22:00）',
+            '平日・休日深夜の応動（22:00-05:00）',
+            '平日・休日時間外の応動（05:00-09:00）'
+        ]
+        
+        for time_slot in time_slots:
+            if time_slot in data:
+                time_data = data[time_slot]
+                # 休日時間
+                row[f'{time_slot}_休日'] = format_hours(time_data['holiday_hours'])
+                # 平日時間
+                row[f'{time_slot}_平日'] = format_hours(time_data['weekday_hours'])
+            else:
+                row[f'{time_slot}_休日'] = ""
+                row[f'{time_slot}_平日'] = ""
+        
+        df_data.append(row)
     
     if df_data:
         df = pd.DataFrame(df_data)
