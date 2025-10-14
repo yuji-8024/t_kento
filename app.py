@@ -239,7 +239,10 @@ def parse_time_to_display_format(time_value):
 
 def parse_time_to_hours(time_value):
     """時間値を時間数に変換する（集計用）"""
+    print(f"DEBUG parse_time_to_hours: 入力値={time_value} (type: {type(time_value)})")
+    
     if time_value is None:
+        print("DEBUG: time_value is None, returning 0")
         return 0
     
     # datetime.timeオブジェクトの場合
@@ -247,11 +250,14 @@ def parse_time_to_hours(time_value):
         hours = time_value.hour
         minutes = time_value.minute
         result = hours + minutes / 60
+        print(f"DEBUG: datetime.time -> {hours}:{minutes} = {result}時間")
         return result
     
     # 文字列の場合
     time_str = str(time_value).strip()
+    print(f"DEBUG: 文字列として処理 - '{time_str}'")
     if not time_str or time_str == '':
+        print("DEBUG: 空文字列, returning 0")
         return 0
     
     # 時間:分:秒の形式をパース
@@ -262,24 +268,31 @@ def parse_time_to_hours(time_value):
                 hours = int(parts[0])
                 minutes = int(parts[1])
                 result = hours + minutes / 60
+                print(f"DEBUG: 時間文字列 {time_str} -> {hours}:{minutes} = {result}時間")
                 return result
-        except:
+        except Exception as e:
+            print(f"DEBUG: 時間文字列パースエラー: {e}")
             pass
     
     # 数値の場合
     try:
         if isinstance(time_value, (int, float)):
             result = time_value * 24
+            print(f"DEBUG: エクセル時間値 {time_value} -> {result}時間")
             return result
         else:
             result = float(time_str)
+            print(f"DEBUG: 数値文字列 {time_str} -> {result}時間")
             return result
-    except:
+    except Exception as e:
+        print(f"DEBUG: 数値変換エラー: {e}")
         import re
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
             result = float(numbers[0])
+            print(f"DEBUG: 正規表現で数値抽出 {time_str} -> {result}時間")
             return result
+        print("DEBUG: 全ての変換に失敗, returning 0")
         return 0
 
 def extract_holiday_data(workbook, member_sheets):
@@ -312,6 +325,7 @@ def extract_holiday_data(workbook, member_sheets):
                     # 時間が00:01以上の場合のみ処理
                     if time_value is not None:
                         time_hours = parse_time_to_hours(time_value)
+                        print(f"DEBUG: {time_cell} - 時間値: {time_value}, 変換後時間数: {time_hours}")
                         if time_hours > 0:
                             # B列の曜日情報を取得（DATE関数の結果を取得）
                             day_cell = f"B{row}"
