@@ -96,6 +96,20 @@ def holiday_tab():
                 
                 if holiday_data:
                     display_holiday_results(holiday_data)
+                    
+                    # 残業代シートから単価を読み込み
+                    overtime_rates = read_overtime_sheet(workbook)
+                    
+                    if overtime_rates:
+                        # 残業代を計算
+                        pay_data = calculate_overtime_pay(holiday_data, overtime_rates)
+                        
+                        if pay_data:
+                            display_overtime_pay_results(pay_data)
+                        else:
+                            st.warning("残業代の計算に失敗しました。")
+                    else:
+                        st.warning("残業代シートから単価データを読み込めませんでした。")
                 else:
                     st.warning("休日・平日仕訳のデータが見つかりませんでした。")
             else:
@@ -499,6 +513,198 @@ def format_hours(hours):
     h = int(hours)
     m = int((hours - h) * 60)
     return f"{h}:{m:02d}"
+
+def hours_to_decimal(hours):
+    """時間を小数形式に変換する（1:30 → 1.5）"""
+    if hours == 0:
+        return 0
+    
+    h = int(hours)
+    m = int((hours - h) * 60)
+    return h + m / 60
+
+def read_overtime_sheet(workbook):
+    """残業代シートからメンバー名と単価を読み込む"""
+    if "残業代" not in workbook.sheetnames:
+        return {}
+    
+    worksheet = workbook["残業代"]
+    member_data = {}
+    
+    # C30から空白セルが来るまで読み込み
+    row = 30
+    while True:
+        cell_c = f"C{row}"
+        member_name = worksheet[cell_c].value
+        
+        if member_name is None or str(member_name).strip() == "":
+            break
+        
+        # D〜G列の単価を取得
+        cell_d = f"D{row}"
+        cell_e = f"E{row}"
+        cell_f = f"F{row}"
+        cell_g = f"G{row}"
+        
+        rate_d = worksheet[cell_d].value or 0
+        rate_e = worksheet[cell_e].value or 0
+        rate_f = worksheet[cell_f].value or 0
+        rate_g = worksheet[cell_g].value or 0
+        
+        member_data[str(member_name).strip()] = {
+            'D': float(rate_d) if rate_d else 0,
+            'E': float(rate_e) if rate_e else 0,
+            'F': float(rate_f) if rate_f else 0,
+            'G': float(rate_g) if rate_g else 0
+        }
+        
+        row += 1
+    
+    return member_data
+
+def match_member_name(full_name, sheet_names):
+    """フルネームとシート名を照合する"""
+    for sheet_name in sheet_names:
+        if sheet_name in full_name or full_name in sheet_name:
+            return sheet_name
+    return None
+
+def calculate_overtime_pay(holiday_data, overtime_rates):
+    """残業代を計算する"""
+    pay_data = {}
+    
+    for member, data in holiday_data.items():
+        # メンバー名とシート名の照合
+        matched_sheet = None
+        for full_name, rates in overtime_rates.items():
+            if match_member_name(full_name, [member]):
+                matched_sheet = member
+                member_rates = rates
+                break
+        
+        if not matched_sheet:
+            continue
+        
+        member_pay = {}
+        
+        # 各時間帯の残業代を計算
+        time_slots = [
+            '休日時間帯の応動（09:00-18:00）',
+            '平日・休日時間外の応動（18:00-22:00）',
+            '平日・休日深夜の応動（22:00-05:00）',
+            '平日・休日時間外の応動（05:00-09:00）'
+        ]
+        
+        for time_slot in time_slots:
+            if time_slot in data:
+                time_data = data[time_slot]
+                holiday_hours = hours_to_decimal(time_data['holiday_hours'])
+                weekday_hours = hours_to_decimal(time_data['weekday_hours'])
+                
+                # 単価の組み合わせで計算
+                if time_slot == '休日時間帯の応動（09:00-18:00）':
+                    # 休日時間帯の応動（09:00-18:00）休日*F列
+                    holiday_pay = holiday_hours * member_rates['F']
+                    weekday_pay = 0  # この時間帯は平日なし
+                elif time_slot == '平日・休日時間外の応動（18:00-22:00）':
+                    # 平日・休日時間外の応動（18:00-22:00）休日*F列
+                    # 平日・休日時間外の応動（18:00-22:00）平日*D列
+                    holiday_pay = holiday_hours * member_rates['F']
+                    weekday_pay = weekday_hours * member_rates['D']
+                elif time_slot == '平日・休日深夜の応動（22:00-05:00）':
+                    # 平日・休日深夜の応動（22:00-05:00）休日*G列
+                    # 平日・休日深夜の応動（22:00-05:00）平日*E列
+                    holiday_pay = holiday_hours * member_rates['G']
+                    weekday_pay = weekday_hours * member_rates['E']
+                elif time_slot == '平日・休日時間外の応動（05:00-09:00）':
+                    # 平日・休日時間外の応動（05:00-09:00）休日*G列
+                    # 平日・休日時間外の応動（05:00-09:00）平日*E列
+                    holiday_pay = holiday_hours * member_rates['G']
+                    weekday_pay = weekday_hours * member_rates['E']
+                else:
+                    holiday_pay = 0
+                    weekday_pay = 0
+                
+                member_pay[time_slot] = {
+                    'holiday_pay': holiday_pay,
+                    'weekday_pay': weekday_pay,
+                    'total_pay': holiday_pay + weekday_pay
+                }
+        
+        pay_data[member] = member_pay
+    
+    return pay_data
+
+def display_overtime_pay_results(pay_data):
+    """残業代計算結果を表示する"""
+    st.markdown("## 💰 残業代計算結果")
+    
+    # データフレームを作成
+    df_data = []
+    for member, data in pay_data.items():
+        row = {'メンバー': member}
+        
+        # 各時間帯の残業代を追加
+        time_slots = [
+            '休日時間帯の応動（09:00-18:00）',
+            '平日・休日時間外の応動（18:00-22:00）',
+            '平日・休日深夜の応動（22:00-05:00）',
+            '平日・休日時間外の応動（05:00-09:00）'
+        ]
+        
+        total_pay = 0
+        for time_slot in time_slots:
+            if time_slot in data:
+                time_data = data[time_slot]
+                # 休日残業代
+                row[f'{time_slot}_休日残業代'] = f"¥{time_data['holiday_pay']:,.0f}"
+                # 平日残業代
+                row[f'{time_slot}_平日残業代'] = f"¥{time_data['weekday_pay']:,.0f}"
+                # 合計残業代
+                row[f'{time_slot}_合計残業代'] = f"¥{time_data['total_pay']:,.0f}"
+                total_pay += time_data['total_pay']
+            else:
+                row[f'{time_slot}_休日残業代'] = "¥0"
+                row[f'{time_slot}_平日残業代'] = "¥0"
+                row[f'{time_slot}_合計残業代'] = "¥0"
+        
+        row['総残業代'] = f"¥{total_pay:,.0f}"
+        df_data.append(row)
+    
+    if df_data:
+        df = pd.DataFrame(df_data)
+        
+        # 表示
+        st.dataframe(df, use_container_width=True)
+        
+        # ダウンロードボタン
+        csv = df.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="📥 CSVファイルとしてダウンロード",
+            data=csv,
+            file_name=f"残業代計算_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+        
+        # 統計情報
+        st.markdown("### 📊 統計情報")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_pay = sum(sum(
+                time_data['total_pay'] for time_data in data.values()
+            ) for data in pay_data.values())
+            st.metric("総残業代", f"¥{total_pay:,.0f}")
+        
+        with col2:
+            avg_pay = total_pay / len(pay_data) if pay_data else 0
+            st.metric("平均残業代", f"¥{avg_pay:,.0f}")
+        
+        with col3:
+            max_pay = max(sum(
+                time_data['total_pay'] for time_data in data.values()
+            ) for data in pay_data.values()) if pay_data else 0
+            st.metric("最大残業代", f"¥{max_pay:,.0f}")
 
 def display_results(overtime_data):
     """結果を表示する"""
