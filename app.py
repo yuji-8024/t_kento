@@ -239,10 +239,7 @@ def parse_time_to_display_format(time_value):
 
 def parse_time_to_hours(time_value):
     """時間値を時間数に変換する（集計用）"""
-    st.write(f"DEBUG parse_time_to_hours: 入力値={time_value} (type: {type(time_value)})")
-    
     if time_value is None:
-        st.write("DEBUG: time_value is None, returning 0")
         return 0
     
     # datetime.timeオブジェクトの場合
@@ -250,7 +247,6 @@ def parse_time_to_hours(time_value):
         hours = time_value.hour
         minutes = time_value.minute
         result = hours + minutes / 60
-        st.write(f"DEBUG: datetime.time -> {hours}:{minutes} = {result}時間")
         return result
     
     # datetime.datetimeオブジェクトの場合
@@ -260,14 +256,11 @@ def parse_time_to_hours(time_value):
         hours = time_part.hour
         minutes = time_part.minute
         result = hours + minutes / 60
-        st.write(f"DEBUG: datetime.datetime -> {hours}:{minutes} = {result}時間")
         return result
     
     # 文字列の場合
     time_str = str(time_value).strip()
-    st.write(f"DEBUG: 文字列として処理 - '{time_str}'")
     if not time_str or time_str == '':
-        st.write("DEBUG: 空文字列, returning 0")
         return 0
     
     # 時間:分:秒の形式をパース
@@ -278,10 +271,8 @@ def parse_time_to_hours(time_value):
                 hours = int(parts[0])
                 minutes = int(parts[1])
                 result = hours + minutes / 60
-                st.write(f"DEBUG: 時間文字列 {time_str} -> {hours}:{minutes} = {result}時間")
                 return result
         except Exception as e:
-            st.write(f"DEBUG: 時間文字列パースエラー: {e}")
             pass
     
     # 数値の場合（エクセルの時間値は小数で表現される）
@@ -289,7 +280,6 @@ def parse_time_to_hours(time_value):
         if isinstance(time_value, (int, float)):
             # エクセルの時間値は1日=1.0で表現されるので、24倍して時間に変換
             result = time_value * 24
-            st.write(f"DEBUG: エクセル時間値 {time_value} -> {result}時間")
             return result
         else:
             # 文字列を数値として変換
@@ -297,10 +287,8 @@ def parse_time_to_hours(time_value):
             # 1未満の場合は時間値として扱う（1日=1.0）
             if result < 1:
                 result = result * 24
-            st.write(f"DEBUG: 数値文字列 {time_str} -> {result}時間")
             return result
     except Exception as e:
-        st.write(f"DEBUG: 数値変換エラー: {e}")
         import re
         numbers = re.findall(r'\d+\.?\d*', time_str)
         if numbers:
@@ -308,9 +296,7 @@ def parse_time_to_hours(time_value):
             # 1未満の場合は時間値として扱う
             if result < 1:
                 result = result * 24
-            st.write(f"DEBUG: 正規表現で数値抽出 {time_str} -> {result}時間")
             return result
-        st.write("DEBUG: 全ての変換に失敗, returning 0")
         return 0
 
 def extract_holiday_data(workbook, member_sheets):
@@ -343,7 +329,6 @@ def extract_holiday_data(workbook, member_sheets):
                     # 時間が00:01以上の場合のみ処理
                     if time_value is not None:
                         time_hours = parse_time_to_hours(time_value)
-                        st.write(f"DEBUG: {time_cell} - 時間値: {time_value}, 変換後時間数: {time_hours}")
                         # 00:01以上（約0.000694時間以上）の場合のみ処理
                         if time_hours > 0.000694:  # 1分 = 1/60/24 = 0.000694時間
                             # B列の曜日情報を取得（DATE関数の結果を取得）
@@ -354,19 +339,8 @@ def extract_holiday_data(workbook, member_sheets):
                             holiday_cell = f"C{row}"
                             holiday_value = worksheet[holiday_cell].value
                             
-                            # デバッグ出力（画面に表示）
-                            st.write(f"DEBUG: {sheet_name} {time_cell} - 時間: {time_value}, B列: {day_value} (type: {type(day_value)}), C列: {holiday_value}")
-                            
                             # 休日・平日の判定
                             is_holiday = is_holiday_day(day_value, holiday_value)
-                            
-                            st.write(f"DEBUG: 判定結果 - 休日: {is_holiday}")
-                            
-                            # より詳細なデバッグ
-                            if hasattr(day_value, 'weekday'):
-                                st.write(f"DEBUG: datetimeオブジェクト - weekday(): {day_value.weekday()}, 日付: {day_value}")
-                            else:
-                                st.write(f"DEBUG: 文字列として処理 - 値: '{day_value}'")
                             
                             if is_holiday:
                                 holiday_hours += time_hours
@@ -389,15 +363,11 @@ def extract_holiday_data(workbook, member_sheets):
 
 def is_holiday_day(day_value, holiday_value):
     """曜日と祝日情報から休日かどうかを判定する"""
-    st.write(f"DEBUG is_holiday_day: day_value={day_value} (type: {type(day_value)}), holiday_value={holiday_value}")
-    
     if day_value is None:
-        st.write("DEBUG: day_value is None, returning False")
         return False
     
     # エクセルの日付シリアル値（整数）の場合
     if isinstance(day_value, int):
-        st.write("DEBUG: エクセル日付シリアル値として処理")
         # エクセルの日付シリアル値をdatetimeオブジェクトに変換
         # エクセルの基準日は1900年1月1日（ただし、1900年は閏年として扱われるバグがある）
         from datetime import datetime, timedelta
@@ -406,67 +376,50 @@ def is_holiday_day(day_value, holiday_value):
             base_date = datetime(1899, 12, 30)  # エクセルの基準日
             target_date = base_date + timedelta(days=day_value)
             weekday = target_date.weekday()
-            st.write(f"DEBUG: シリアル値 {day_value} -> 日付: {target_date}, weekday(): {weekday}")
             
             # 土曜日(5)と日曜日(6)は休日
             if weekday in [5, 6]:
-                st.write("DEBUG: 土日なので休日")
                 return True
             
             # 月〜金の場合、C列に「祝日」と記載がある場合は休日
             if holiday_value is not None and str(holiday_value).strip() == '祝日':
-                st.write("DEBUG: 祝日なので休日")
                 return True
             
-            st.write("DEBUG: 平日")
             return False
         except Exception as e:
-            st.write(f"DEBUG: 日付変換エラー: {e}")
             # エラーの場合は祝日情報で判定
             if holiday_value is not None and str(holiday_value).strip() == '祝日':
-                st.write("DEBUG: 祝日なので休日（エラー時）")
                 return True
-            st.write("DEBUG: 平日（エラー時）")
             return False
     
     # DATE関数の結果（datetimeオブジェクト）の場合
     if hasattr(day_value, 'weekday'):
-        st.write("DEBUG: datetimeオブジェクトとして処理")
         # weekday()は月曜日=0, 日曜日=6
         weekday = day_value.weekday()
-        st.write(f"DEBUG: weekday() = {weekday}")
         
         # 土曜日(5)と日曜日(6)は休日
         if weekday in [5, 6]:
-            st.write("DEBUG: 土日なので休日")
             return True
         
         # 月〜金の場合、C列に「祝日」と記載がある場合は休日
         if holiday_value is not None and str(holiday_value).strip() == '祝日':
-            st.write("DEBUG: 祝日なので休日")
             return True
         
-        st.write("DEBUG: 平日")
         return False
     
     # 文字列の場合
     day_str = str(day_value).strip()
-    st.write(f"DEBUG: 文字列として処理 - '{day_str}'")
     
     # 土日は休日
     if day_str in ['土', '日']:
-        st.write("DEBUG: 土日なので休日")
         return True
     
     # 月〜金の場合、C列に「祝日」と記載がある場合は休日
     if day_str in ['月', '火', '水', '木', '金']:
         if holiday_value is not None and str(holiday_value).strip() == '祝日':
-            st.write("DEBUG: 祝日なので休日")
             return True
-        st.write("DEBUG: 平日")
         return False
     
-    st.write("DEBUG: 判定できないので平日")
     return False
 
 def display_holiday_results(holiday_data):
