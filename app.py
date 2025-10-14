@@ -105,7 +105,7 @@ def holiday_tab():
                         pay_data = calculate_overtime_pay(holiday_data, overtime_rates)
                         
                         if pay_data:
-                            display_overtime_pay_results(pay_data)
+                            display_overtime_pay_results(pay_data, holiday_data)
                         else:
                             st.warning("残業代の計算に失敗しました。")
                     else:
@@ -635,16 +635,16 @@ def calculate_overtime_pay(holiday_data, overtime_rates):
     
     return pay_data
 
-def display_overtime_pay_results(pay_data):
+def display_overtime_pay_results(pay_data, holiday_data):
     """残業代計算結果を表示する"""
     st.markdown("## 💰 残業代計算結果")
     
-    # データフレームを作成
+    # データフレームを作成（指定された形式）
     df_data = []
     for member, data in pay_data.items():
         row = {'メンバー': member}
         
-        # 各時間帯の残業代を追加
+        # 稼働時間と請求額を計算
         time_slots = [
             '休日時間帯の応動（09:00-18:00）',
             '平日・休日時間外の応動（18:00-22:00）',
@@ -652,23 +652,34 @@ def display_overtime_pay_results(pay_data):
             '平日・休日時間外の応動（05:00-09:00）'
         ]
         
+        total_work_hours = 0
         total_pay = 0
-        for time_slot in time_slots:
-            if time_slot in data:
-                time_data = data[time_slot]
-                # 休日残業代
-                row[f'{time_slot}_休日残業代'] = f"¥{time_data['holiday_pay']:,.0f}"
-                # 平日残業代
-                row[f'{time_slot}_平日残業代'] = f"¥{time_data['weekday_pay']:,.0f}"
-                # 合計残業代
-                row[f'{time_slot}_合計残業代'] = f"¥{time_data['total_pay']:,.0f}"
-                total_pay += time_data['total_pay']
-            else:
-                row[f'{time_slot}_休日残業代'] = "¥0"
-                row[f'{time_slot}_平日残業代'] = "¥0"
-                row[f'{time_slot}_合計残業代'] = "¥0"
         
-        row['総残業代'] = f"¥{total_pay:,.0f}"
+        for time_slot in time_slots:
+            if time_slot in data and time_slot in holiday_data[member]:
+                time_data = data[time_slot]
+                holiday_time_data = holiday_data[member][time_slot]
+                
+                # 稼働時間（休日+平日の合計時間）
+                work_hours = hours_to_decimal(holiday_time_data['holiday_hours']) + hours_to_decimal(holiday_time_data['weekday_hours'])
+                total_work_hours += work_hours
+                
+                # 請求額（休日+平日の合計金額）
+                pay_amount = time_data['holiday_pay'] + time_data['weekday_pay']
+                total_pay += pay_amount
+                
+                # 稼働時間列
+                row[f'稼働：{time_slot}'] = f"{work_hours:.1f}時間"
+                # 請求額列
+                row[f'請求：{time_slot}'] = f"¥{pay_amount:,.0f}"
+            else:
+                row[f'稼働：{time_slot}'] = "0.0時間"
+                row[f'請求：{time_slot}'] = "¥0"
+        
+        # 総稼働時間と総請求額
+        row['稼働時間'] = f"{total_work_hours:.1f}時間"
+        row['請求額'] = f"¥{total_pay:,.0f}"
+        
         df_data.append(row)
     
     if df_data:
@@ -694,17 +705,18 @@ def display_overtime_pay_results(pay_data):
             total_pay = sum(sum(
                 time_data['total_pay'] for time_data in data.values()
             ) for data in pay_data.values())
-            st.metric("総残業代", f"¥{total_pay:,.0f}")
+            st.metric("総請求額", f"¥{total_pay:,.0f}")
         
         with col2:
-            avg_pay = total_pay / len(pay_data) if pay_data else 0
-            st.metric("平均残業代", f"¥{avg_pay:,.0f}")
+            total_hours = sum(sum(
+                hours_to_decimal(holiday_time_data['holiday_hours']) + hours_to_decimal(holiday_time_data['weekday_hours'])
+                for holiday_time_data in member_data.values()
+            ) for member_data in holiday_data.values())
+            st.metric("総稼働時間", f"{total_hours:.1f}時間")
         
         with col3:
-            max_pay = max(sum(
-                time_data['total_pay'] for time_data in data.values()
-            ) for data in pay_data.values()) if pay_data else 0
-            st.metric("最大残業代", f"¥{max_pay:,.0f}")
+            avg_pay = total_pay / len(pay_data) if pay_data else 0
+            st.metric("平均請求額", f"¥{avg_pay:,.0f}")
 
 def display_results(overtime_data):
     """結果を表示する"""
